@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react"; 
+import { useEffect, useState } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import Header from "./components/Header";
 import Hero from "./components/Hero";
@@ -14,7 +14,9 @@ import LearnMore from "./pages/LearnMore";
 import ReturnToTop from "./components/ReturnToTop";
 import MouseFollower from "./components/MouseFollower";
 import Profile from "./components/Profile";
+import { clearPendoSession, identifyPendoVisitorFromToken } from "./pendo";
 
+// eslint-disable-next-line react/prop-types -- this project does not use propTypes
 function ProtectedRoute({ isAuthenticated, children }) {
   const location = useLocation();
   return isAuthenticated ? children : <Navigate to="/auth" state={{ from: location.pathname, message: "Please log in to access this page." }} />;
@@ -41,6 +43,7 @@ function App() {
         } else {
           setIsAuthenticated(true);
           setUser({ name: tokenData.name, email: tokenData.email });
+          identifyPendoVisitorFromToken(tokenData);
         }
       } catch (error) {
         console.error("Token decoding error:", error);
@@ -65,6 +68,7 @@ function App() {
               localStorage.removeItem("token");
               setIsAuthenticated(false);
               setUser(null);
+              clearPendoSession();
             }}
           />
         )}
@@ -86,6 +90,7 @@ function App() {
             localStorage.removeItem("token");
             setIsAuthenticated(false);
             setUser(null);
+            clearPendoSession();
           }} /></ProtectedRoute>} />
         </Routes>
         <Footer />

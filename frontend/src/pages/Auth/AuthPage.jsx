@@ -1,8 +1,10 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mail, Lock, User, ArrowRight, Github, Chrome } from "lucide-react";
+import { Mail, Lock, User, ArrowRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { identifyPendoVisitor } from "../../pendo";
 
+// eslint-disable-next-line react/prop-types -- this project does not use propTypes
 const AuthPage = ({ setIsAuthenticated, setUser  }) => {
   const navigate = useNavigate();
   const [isLogin, setIsLogin] = useState(true);
@@ -41,6 +43,7 @@ const AuthPage = ({ setIsAuthenticated, setUser  }) => {
   
       setIsAuthenticated(true);
       setUser(data.user);
+      identifyPendoVisitor(data.user);
       navigate("/"); // Redirect after login/signup
   
     } catch (error) {
