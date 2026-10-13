@@ -1,4 +1,3 @@
-import React from 'react';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -11,6 +10,7 @@ import {
 } from 'chart.js';
 import { Line } from 'react-chartjs-2';
 import { Activity, Heart, Footprints, Flame, Download } from 'lucide-react';
+import { trackPendoEvent } from '../utils/pendo';
 
 ChartJS.register(
   CategoryScale,
@@ -90,8 +90,33 @@ const HealthTracking = () => {
   };
 
   const handleExport = () => {
-    // In a real app, this would trigger a CSV/PDF export
-    console.log('Exporting data...');
+    // Export the dashboard metrics as a CSV file: one row per day, one column per metric
+    const metrics = Object.keys(mockHealthData);
+    const days = mockHealthData.steps.labels;
+    const csv = [
+      ['Day', ...metrics],
+      ...days.map((day, i) => [day, ...metrics.map((metric) => mockHealthData[metric].data[i])]),
+    ]
+      .map((row) => row.join(','))
+      .join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'health-data.csv';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+
+    // Pendo: export file generated and download started
+    trackPendoEvent('health_data_exported', {
+      exportFormat: 'csv',
+      metricsIncluded: metrics,
+      periodDays: days.length,
+      dataPointCount: metrics.length * days.length,
+      fileSizeBytes: blob.size,
+    });
   };
 
   return (

@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Star, Clock, Video, Calendar, Search, MapPin, Shield, Award } from 'lucide-react';
+import { trackPendoEvent } from '../utils/pendo';
 
 const doctors = [
   {
@@ -46,12 +47,24 @@ const doctors = [
 const specialties = ['All Specialties', 'Cardiologist', 'Nutritionist', 'Physical Therapist', 'Dermatologist', 'Psychologist'];
 const locations = ['All Locations', 'New York, NY', 'Los Angeles, CA', 'Chicago, IL', 'Houston, TX'];
 
+// Wait until the user stops typing / changing filters before recording a search
+const SEARCH_TRACKING_DELAY_MS = 1000;
+
+// Defaults match the first option of each booking modal field
+const initialBookingDetails = {
+  appointmentDate: '',
+  appointmentTime: '9:00 AM',
+  consultationType: 'Video Call',
+  notes: ''
+};
+
 const ExpertCare = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSpecialty, setSelectedSpecialty] = useState('All Specialties');
   const [selectedLocation, setSelectedLocation] = useState('All Locations');
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [selectedDoctor, setSelectedDoctor] = useState(null);
+  const [bookingDetails, setBookingDetails] = useState(initialBookingDetails);
 
   const filteredDoctors = doctors.filter(doctor => {
     const matchesSearch = doctor.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -60,10 +73,54 @@ const ExpertCare = () => {
     const matchesLocation = selectedLocation === 'All Locations' || doctor.location === selectedLocation;
     return matchesSearch && matchesSpecialty && matchesLocation;
   });
+  const resultsCount = filteredDoctors.length;
+
+  // Pendo: record the combined search / filter state once the user pauses (skips the unfiltered default)
+  useEffect(() => {
+    const isDefaultSearch =
+      !searchTerm.trim() && selectedSpecialty === 'All Specialties' && selectedLocation === 'All Locations';
+    if (isDefaultSearch) return;
+
+    const timeoutId = setTimeout(() => {
+      trackPendoEvent('doctor_search_performed', {
+        searchTerm: searchTerm.trim().slice(0, 100),
+        selectedSpecialty,
+        selectedLocation,
+        resultsCount
+      });
+    }, SEARCH_TRACKING_DELAY_MS);
+    return () => clearTimeout(timeoutId);
+  }, [searchTerm, selectedSpecialty, selectedLocation, resultsCount]);
 
   const handleBooking = (doctor) => {
     setSelectedDoctor(doctor);
+    setBookingDetails(initialBookingDetails);
     setShowBookingModal(true);
+  };
+
+  const handleBookingDetailChange = (e) => {
+    setBookingDetails({
+      ...bookingDetails,
+      [e.target.name]: e.target.value
+    });
+  };
+
+  const handleConfirmBooking = () => {
+    // Pendo: consultation booking confirmed. There is no booking API yet, so this fires on confirm.
+    // Only whether notes were added is sent, never the notes text.
+    trackPendoEvent('appointment_booked', {
+      doctorName: selectedDoctor.name,
+      specialty: selectedDoctor.specialty,
+      location: selectedDoctor.location,
+      consultationFee: selectedDoctor.consultationFee,
+      rating: selectedDoctor.rating,
+      availability: selectedDoctor.availability,
+      consultationType: bookingDetails.consultationType,
+      appointmentDate: bookingDetails.appointmentDate || undefined,
+      appointmentTime: bookingDetails.appointmentTime,
+      hasNotes: Boolean(bookingDetails.notes.trim())
+    });
+    setShowBookingModal(false);
   };
 
   return (
@@ -192,6 +249,9 @@ const ExpertCare = () => {
                   </label>
                   <input
                     type="date"
+                    name="appointmentDate"
+                    value={bookingDetails.appointmentDate}
+                    onChange={handleBookingDetailChange}
                     className="w-full p-2 border border-gray-300 rounded-lg"
                   />
                 </div>
@@ -199,7 +259,12 @@ const ExpertCare = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Select Time
                   </label>
-                  <select className="w-full p-2 border border-gray-300 rounded-lg">
+                  <select
+                    name="appointmentTime"
+                    value={bookingDetails.appointmentTime}
+                    onChange={handleBookingDetailChange}
+                    className="w-full p-2 border border-gray-300 rounded-lg"
+                  >
                     <option>9:00 AM</option>
                     <option>10:00 AM</option>
                     <option>11:00 AM</option>
@@ -211,7 +276,12 @@ const ExpertCare = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Consultation Type
                   </label>
-                  <select className="w-full p-2 border border-gray-300 rounded-lg">
+                  <select
+                    name="consultationType"
+                    value={bookingDetails.consultationType}
+                    onChange={handleBookingDetailChange}
+                    className="w-full p-2 border border-gray-300 rounded-lg"
+                  >
                     <option>Video Call</option>
                     <option>Voice Call</option>
                     <option>Chat</option>
@@ -222,6 +292,9 @@ const ExpertCare = () => {
                     Notes (Optional)
                   </label>
                   <textarea
+                    name="notes"
+                    value={bookingDetails.notes}
+                    onChange={handleBookingDetailChange}
                     className="w-full p-2 border border-gray-300 rounded-lg"
                     rows={3}
                     placeholder="Any specific concerns or questions..."
@@ -236,10 +309,7 @@ const ExpertCare = () => {
                   Cancel
                 </button>
                 <button
-                  onClick={() => {
-
-                    setShowBookingModal(false);
-                  }}
+                  onClick={handleConfirmBooking}
                   className="flex-1 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700"
                 >
                   Confirm Booking

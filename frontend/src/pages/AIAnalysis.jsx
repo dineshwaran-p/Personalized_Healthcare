@@ -1,14 +1,16 @@
-import React from 'react';
 import {
   Brain,
   AlertTriangle,
   Sparkles,
-  MessageSquare,
   ArrowRight,
   ChevronRight,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import AIChatAssistant from '../components/AIChatAssistant';
+import { trackPendoEvent } from '../utils/pendo';
+
+// Flask ML service (ml-model/api/app1.py)
+const ANALYZE_ENDPOINT = 'http://localhost:5001/analyze';
 
 const AIAnalysis = () => {
   const insights = [
@@ -49,7 +51,35 @@ const AIAnalysis = () => {
       heartRate: 75,
       steps: 8000,
       calories: 2300,
-    };}
+    };
+    const startedAt = Date.now();
+    let result = null;
+    let requestError;
+
+    try {
+      const response = await fetch(ANALYZE_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      result = await response.json();
+    } catch (error) {
+      console.error('AI analysis error:', error.message);
+      requestError = error.message;
+    }
+    const errorMessage = result?.error ?? requestError;
+
+    // Pendo: AI analysis finished, successfully or not. Only the derived score and
+    // recommendation are sent, never the raw vitals.
+    trackPendoEvent('ai_health_analysis_completed', {
+      success: Boolean(result?.success),
+      predictedActivityScore: result?.insights?.predicted_activity_score,
+      recommendation: result?.insights?.recommendation,
+      inputMetrics: Object.keys(data),
+      durationMs: Date.now() - startedAt,
+      errorMessage: errorMessage && String(errorMessage).slice(0, 100),
+    });
+  };
   
   return (
     <div className="pt-20 min-h-screen bg-gray-50">

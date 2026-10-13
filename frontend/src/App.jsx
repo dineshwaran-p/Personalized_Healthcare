@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react"; 
+import { useEffect, useState } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import Header from "./components/Header";
 import Hero from "./components/Hero";
@@ -14,7 +14,9 @@ import LearnMore from "./pages/LearnMore";
 import ReturnToTop from "./components/ReturnToTop";
 import MouseFollower from "./components/MouseFollower";
 import Profile from "./components/Profile";
+import { trackPendoEvent } from "./utils/pendo";
 
+// eslint-disable-next-line react/prop-types -- this codebase does not declare PropTypes
 function ProtectedRoute({ isAuthenticated, children }) {
   const location = useLocation();
   return isAuthenticated ? children : <Navigate to="/auth" state={{ from: location.pathname, message: "Please log in to access this page." }} />;
@@ -36,6 +38,13 @@ function App() {
 
         if (isExpired) {
           localStorage.removeItem("token");
+          // Pendo: user silently logged out because the stored JWT expired.
+          // The token payload only carries id/iat/exp, so tokenData.id is the only identifier.
+          trackPendoEvent("session_expired", {
+            reason: "token_expired",
+            userId: tokenData.id,
+            expiredAt: tokenData.exp, // JWT exp claim, seconds since epoch
+          });
           setIsAuthenticated(false);
           setUser(null);
         } else {
@@ -44,6 +53,8 @@ function App() {
         }
       } catch (error) {
         console.error("Token decoding error:", error);
+        // Pendo: user silently logged out because the stored token could not be decoded
+        trackPendoEvent("session_expired", { reason: "invalid_token" });
         localStorage.removeItem("token");
         setIsAuthenticated(false);
         setUser(null);

@@ -1,6 +1,10 @@
-import React, { useState } from 'react';
-import { Utensils, Clock, Download, ChevronRight, Filter, Search, Star, Calendar, ShoppingCart } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Clock, ChevronRight, Search, Star, Calendar, ShoppingCart } from 'lucide-react';
 import mealPlansData from '../../data/mealPlans.json';
+import { trackPendoEvent } from '../utils/pendo';
+
+// Wait until the user stops typing / toggling tags before recording a search
+const SEARCH_TRACKING_DELAY_MS = 1000;
 
 const DietPlans = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -17,10 +21,44 @@ const DietPlans = () => {
     const matchesTags = selectedTags.length === 0 || selectedTags.some((tag) => plan.tags.includes(tag));
     return matchesSearch && matchesTags;
   });
+  const resultsCount = filteredPlans.length;
+  const totalPlans = mealPlans.length;
+
+  // Pendo: record the combined search / tag filter state once the user pauses (skips the empty state)
+  useEffect(() => {
+    if (!searchTerm.trim() && selectedTags.length === 0) return;
+
+    const timeoutId = setTimeout(() => {
+      trackPendoEvent('diet_plan_search_performed', {
+        searchTerm: searchTerm.trim().slice(0, 100),
+        selectedTags,
+        resultsCount,
+        totalPlans,
+      });
+    }, SEARCH_TRACKING_DELAY_MS);
+    return () => clearTimeout(timeoutId);
+  }, [searchTerm, selectedTags, resultsCount, totalPlans]);
 
   const handlePlanSelect = (plan) => {
     setSelectedPlan(plan);
     setShowModal(true);
+  };
+
+  const handleStartPlan = () => {
+    // Pendo: user committed to the selected plan. There is no plan start / subscription API yet,
+    // so this fires on confirm. The active search and tags tie discovery to conversion.
+    trackPendoEvent('diet_plan_started', {
+      planTitle: selectedPlan.title,
+      price: selectedPlan.price,
+      duration: selectedPlan.duration,
+      calories: selectedPlan.calories,
+      tags: selectedPlan.tags,
+      rating: selectedPlan.rating,
+      reviews: selectedPlan.reviews,
+      searchTerm: searchTerm.trim().slice(0, 100),
+      selectedTags,
+    });
+    setShowModal(false);
   };
 
   return (
@@ -210,7 +248,7 @@ const DietPlans = () => {
                 {/* Action Buttons */}
                 <div className="flex space-x-4 mt-6">
                   <button
-                    onClick={() => setShowModal(false)}
+                    onClick={handleStartPlan}
                     className="flex-1 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700"
                   >
                     Start This Plan
