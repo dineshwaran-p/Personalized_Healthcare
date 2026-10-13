@@ -1,10 +1,21 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mail, Lock, User, ArrowRight, Github, Chrome } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { Mail, Lock, User, ArrowRight } from "lucide-react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { identifyPendoVisitor, trackPendoEvent } from "../../utils/pendo";
 
+// How the visitor reached the auth page: redirected by ProtectedRoute (sets state.from),
+// via the header Login button (the /signup route sets state.isSignUp), or directly.
+const getAuthEntryPoint = (locationState) => {
+  if (locationState?.from) return "protected_route";
+  if (locationState?.isSignUp) return "header_login";
+  return "direct";
+};
+
+// eslint-disable-next-line react/prop-types -- this codebase does not declare PropTypes
 const AuthPage = ({ setIsAuthenticated, setUser  }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [isLogin, setIsLogin] = useState(true);
   const [formData, setFormData] = useState({
     name: "",
@@ -15,12 +26,20 @@ const AuthPage = ({ setIsAuthenticated, setUser  }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const authMode = isLogin ? "login" : "signup";
   
     if (!isLogin && formData.password !== formData.confirmPassword) {
+      // Pendo: sign-up blocked by client-side validation
+      trackPendoEvent("auth_failed", {
+        authMode,
+        failureStage: "client_validation",
+        errorMessage: "Passwords do not match",
+      });
       alert("Passwords do not match");
       return;
     }
   
+    let httpStatus;
     try {
       const endpoint = isLogin ? "http://localhost:4000/login" : "http://localhost:4000/register";
       const response = await fetch(endpoint, {
@@ -28,6 +47,7 @@ const AuthPage = ({ setIsAuthenticated, setUser  }) => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData),
       });
+      httpStatus = response.status;
   
       const data = await response.json();
   
@@ -41,10 +61,33 @@ const AuthPage = ({ setIsAuthenticated, setUser  }) => {
   
       setIsAuthenticated(true);
       setUser(data.user);
+
+      // Pendo: identify the authenticated visitor, then record the successful sign-in / sign-up.
+      // Only the user id is sent, never name, email or password.
+      identifyPendoVisitor(data.user?.id);
+      const authEventProperties = {
+        userId: data.user?.id,
+        authMethod: "email_password",
+        redirectFrom: location.state?.from,
+        entryPoint: getAuthEntryPoint(location.state),
+      };
+      if (isLogin) {
+        trackPendoEvent("user_logged_in", authEventProperties);
+      } else {
+        trackPendoEvent("user_signed_up", authEventProperties);
+      }
       navigate("/"); // Redirect after login/signup
   
     } catch (error) {
       console.error("Auth error:", error.message);
+      // Pendo: failed sign-in / sign-up (server rejection, or network / response parsing error).
+      // httpStatus is only set once the server has responded.
+      trackPendoEvent("auth_failed", {
+        authMode,
+        failureStage: httpStatus ? "server" : "network",
+        httpStatus,
+        errorMessage: error.message?.slice(0, 100),
+      });
     }
   };
   

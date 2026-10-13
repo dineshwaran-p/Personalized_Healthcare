@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { MessageSquare, Send, X, Maximize2, Minimize2, Loader, Bot, User, Chrome } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { MessageSquare, Send, X, Maximize2, Minimize2, Loader, Bot, User } from 'lucide-react';
+import { trackPendoEvent } from '../utils/pendo';
 
 const AIChatAssistant = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -14,7 +15,8 @@ const AIChatAssistant = () => {
     }
   ]);
 
-  const handleSend = () => {
+  // inputMethod: 'enter_key' | 'send_button'
+  const handleSend = (inputMethod) => {
     if (!message.trim()) return;
 
     // Add user message
@@ -26,6 +28,13 @@ const AIChatAssistant = () => {
     };
 
     setMessages(prev => [...prev, newMessage]);
+
+    // Pendo: user sent a chat message. Never send the message text (may contain health information).
+    trackPendoEvent('ai_chat_message_sent', {
+      messageLength: message.trim().length,
+      conversationTurn: messages.filter(msg => msg.isUser).length + 1,
+      inputMethod
+    });
     setMessage('');
 
     // Add typing indicator
@@ -147,13 +156,13 @@ const AIChatAssistant = () => {
                 type="text"
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+                onKeyPress={(e) => e.key === 'Enter' && handleSend('enter_key')}
                 placeholder="Type your message..."
                 className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 
                   focus:ring-teal-500 focus:border-transparent transition-all duration-200"
               />
               <button
-                onClick={handleSend}
+                onClick={() => handleSend('send_button')}
                 className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 
                   transition-all duration-200 transform hover:scale-105 focus:ring-2 
                   focus:ring-teal-500 focus:ring-offset-2"
